@@ -2,9 +2,8 @@
 const int referenceVolts = 5;
 
 // time to wait before measurements
-const int delayTime = 1000;
-const unsigned long sleepTime = 1; //56;
-
+const int measurementTime = 100; //time to wait after measuring a voltage
+const unsigned long sleepTime = 60000; //time to wait before making a decision
 const float hot = 25.0;  //threshold temperature
 const float extra_hot = 30.0; //extra threshold for third fan
 
@@ -34,6 +33,12 @@ const int fan1 = 9;
 const int fan2 = 10;
 const int fan3 = 3;
 
+unsigned long time;
+unsigned long leap_time;
+unsigned long start_time;
+unsigned long elapsed = 0;
+unsigned long cycles = 0;
+
 #include <SPI.h>
 #include <Ethernet.h>
 const int GRENIER_PORT = 80;
@@ -41,7 +46,12 @@ const int GRENIER_PORT = 80;
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  
 EthernetServer server = EthernetServer(GRENIER_PORT);
 
+int battery;
+int fan;
+int extra_fan;
+    
 void setup(){
+  start_time = millis();
   pinMode(dc, OUTPUT);
   pinMode(solar1, OUTPUT);
   pinMode(solar2, OUTPUT);  
@@ -50,6 +60,7 @@ void setup(){
   pinMode(fan3, OUTPUT);
   Ethernet.begin(mac);
   server.begin();
+  time = millis();
 }
 
 float valToVolts(int val){
@@ -61,18 +72,15 @@ float getTemp(int in){
     return a3*volts*volts*volts + b2*volts*volts + c1*volts + d;
 }
 
-
 float readTemp(int in){
   float temp = getTemp(in);
-  delay(delayTime);
-  //printTemp(in, temp);
+  delay(measurementTime);
   return temp;
 }
 
 float readVoltage(int in){
   float volts = valToVolts(analogRead(in));
-  delay(delayTime);
-  //printVolts(in, volts);
+  delay(measurementTime);
   return volts;
 }
 
@@ -84,7 +92,6 @@ int setPowerSource(float v1, float v2){
   digitalWrite(dc, battery);
   return battery;
 }
-
 
 int controlFans(float temp1, float temp2){
   int fan = LOW;
@@ -110,11 +117,16 @@ void loop(){
   float temp2 = readTemp(1);
   float v1 = readVoltage(2);
   float v2 = readVoltage(3);
-  
-  int battery = setPowerSource(v1, v2);
-  int fan = controlFans(temp1, temp2);
-  int extra_fan = controlExtraFan(temp1, temp2);
-  
+  leap_time = millis();
+  if (leap_time > time + sleepTime){
+    battery = setPowerSource(v1, v2);
+    fan = controlFans(temp1, temp2);
+    extra_fan = controlExtraFan(temp1, temp2);
+    cycles += 1;
+    time = leap_time;
+  }
+  elapsed = leap_time - start_time;
+
   EthernetClient client = server.available();
   if(client){
     boolean current_line_is_blank = true;
@@ -139,6 +151,10 @@ void loop(){
           client.println(fan);
           client.print("extra fan:");
           client.println(fan);
+          client.print("cycles;");
+          client.println(cycles);
+          client.print("running time(ms):");
+          client.println(elapsed);
           break;
         }
         if (c == '\n'){
@@ -148,7 +164,7 @@ void loop(){
         }
       }
     }
+  delay(1);
   client.stop();
   }
-  delay(sleepTime * delayTime);
 }
