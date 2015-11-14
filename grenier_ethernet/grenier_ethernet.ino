@@ -29,13 +29,17 @@ const int t2in = 1;
 const int v1in = 2;
 const int v2in = 3;
 
-/* relay control outputs */
+/* 
+  relay control outputs
+  pins 10, 11, 12, and 13 on the Uno are used by the ethernet shield
+*/
+
 const int dc = 3;
-const int solar1out = 5;
-const int solar2out = 6;
-const int fan1out = 9;
-const int fan2out = 11;
-const int fan3out = 12;
+const int solar1out = 4;
+const int solar2out = 5;
+const int fan1out = 6;
+const int fan2out = 7;
+const int fan3out = 8;
 
 /* network */
 const int HTTP_PORT = 80;
