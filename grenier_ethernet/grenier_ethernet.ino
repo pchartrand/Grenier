@@ -1,67 +1,135 @@
-// reference voltage for temperature measurements 
+
+#include <SPI.h>
+#include <Ethernet.h>
+
+/* reference voltages */
 const int referenceVolts = 5;
+const float charged = 12.0;
 
-// time to wait before measurements
-const int measurementTime = 100; //time to wait after measuring a voltage
-const unsigned long sleepTime = 60000; //time to wait before making a decision
-const float hot = 25.0;  //threshold temperature
-const float extra_hot = 30.0; //extra threshold for third fan
+/* resistor divider network for voltage measurement */
+const float voltageDivider = 10.0;
 
-const float charged = 12.0;  // voltage
-/* 
-Assuming a third degree polynomial relationship between voltage
-and temperature with a voltage divider made of an ntc 
-thermistor (pullup) and a 5k6 resistor (to ground).
-Voltage measured across the 5k6 resistor.
+/* timing constants */
+const int measurementTime = 100; 
+const unsigned long sleepTime = 60000;
 
-*/
+/* threshold temperatures */
+const float hot = 25.0;
+const float extra_hot = 30.0;
 
+/* NTC polynomial coeeficients for voltage to temperature conversion */
 const float a3 = 3.296;
 const float b2 = -22.378;
 const float c1 =  70.951;
 const float d = -49.382;
 
-// resistor divider network for voltage measurement
-const float voltageDivider = 10.0;
-
+/* analog inputs */
+const int t1in = 0;
+const int t2in = 1;
+const int v1in = 2;
+const int v2in = 3;
 
 /* relay control outputs */
 const int dc = 3;
-const int solar1 = 5;
-const int solar2 = 6;
-const int fan1 = 9;
-const int fan2 = 10;
-const int fan3 = 3;
+const int solar1out = 5;
+const int solar2out = 6;
+const int fan1out = 9;
+const int fan2out = 11;
+const int fan3out = 12;
 
+/* network */
+const int HTTP_PORT = 80;
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  
+
+/* global variables */
+unsigned long start_time;
 unsigned long time;
 unsigned long leap_time;
-unsigned long start_time;
 unsigned long elapsed = 0;
-unsigned long cycles = 0;
+int battery_status;
+int fan_status;
+int extra_fan_status;
 
-#include <SPI.h>
-#include <Ethernet.h>
-const int GRENIER_PORT = 80;
+/* program start */
+EthernetServer server = EthernetServer(HTTP_PORT);
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  
-EthernetServer server = EthernetServer(GRENIER_PORT);
-
-int battery;
-int fan;
-int extra_fan;
-    
 void setup(){
   start_time = millis();
   pinMode(dc, OUTPUT);
-  pinMode(solar1, OUTPUT);
-  pinMode(solar2, OUTPUT);  
-  pinMode(fan1, OUTPUT);
-  pinMode(fan2, OUTPUT);
-  pinMode(fan3, OUTPUT);
+  pinMode(solar1out, OUTPUT);
+  pinMode(solar2out, OUTPUT);  
+  pinMode(fan1out, OUTPUT);
+  pinMode(fan2out, OUTPUT);
+  pinMode(fan3out, OUTPUT);
   Ethernet.begin(mac);
   server.begin();
   time = millis();
 }
+
+void loop(){
+  float temp1 = readTemp(t1in);
+  float temp2 = readTemp(t2in);
+  float volt1 = readVoltage(v1in);
+  float volt2 = readVoltage(v2in);
+  leap_time = millis();
+  if (leap_time > time + sleepTime){
+    battery_status = setPowerSource(volt1, volt2);
+    fan_status = controlFans(temp1, temp2);
+    extra_fan_status = controlExtraFan(temp1, temp2);
+    time = leap_time;
+    Ethernet.maintain(); 
+  }
+  elapsed = leap_time - start_time;
+
+  EthernetClient client = server.available();
+  if(client){
+    boolean current_line_is_blank = true;
+    while(client.connected()){
+      if (client.available()){
+        char c = client.read();
+        if( c == '\n' && current_line_is_blank){
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: text/html; charset=utf-8");
+          client.println("Connection: close");  // the connection will be closed after completion of the response
+          client.println("Refresh: 60");  // refresh the page automatically every 5 sec
+          client.println();
+          client.println("<html>");
+          client.println("<head><title>Grenier</title></head>");
+          client.println("<body><p>");
+          client.println("<h1>Grenier</h1>");
+          client.println("<p>température 1 :");
+          client.println(temp1);
+          client.println("<br />température 2 :");
+          client.println(temp2);
+          client.println("</p><p>panneau solaire 1 :");
+          client.println(volt1);
+          client.println("<br />panneau solaire 2 :");
+          client.println(volt2);  
+          client.println("</p><p>sur solaire :");
+          client.println(battery_status);
+          client.println("<br />ventilateurs :");
+          client.println(fan_status);
+          client.println("<br />ventilateur supplémentaire :");
+          client.println(extra_fan_status);
+          client.println("</p><p>fonctionne depuis :");
+          client.println((elapsed / 1000.0), 0);
+          client.println("s");
+          client.println("</p></body></html>");
+          break;
+        }
+        if (c == '\n'){
+          current_line_is_blank = true;
+        } else if (c != '\r'){
+          current_line_is_blank = false;
+        }
+      }
+    }
+  delay(1);
+  client.stop();
+  }
+}
+
+/* functions */
 
 float valToVolts(int val){
   return (val / 1023.0) * referenceVolts * voltageDivider;
@@ -85,12 +153,12 @@ float readVoltage(int in){
 }
 
 int setPowerSource(float v1, float v2){
-  int battery = LOW;
+  int power_level = LOW;
   if (v1 > charged and v2 > charged) {
-    battery = HIGH;
+    power_level = HIGH;
   }
-  digitalWrite(dc, battery);
-  return battery;
+  digitalWrite(dc, power_level);
+  return power_level;
 }
 
 int controlFans(float temp1, float temp2){
@@ -98,8 +166,8 @@ int controlFans(float temp1, float temp2){
   if (temp2 > hot and temp2 > temp1){
     fan = HIGH;
   }
-  digitalWrite(fan1, fan);
-  digitalWrite(fan2, fan);
+  digitalWrite(fan1out, fan);
+  digitalWrite(fan2out, fan);
   return fan;
 }
 
@@ -108,63 +176,6 @@ int controlExtraFan(float temp1, float temp2){
   if (temp1 > extra_hot or temp2 > extra_hot){
     extra_fan = HIGH;
   }
-  digitalWrite(fan3, extra_fan);
+  digitalWrite(fan3out, extra_fan);
   return extra_fan;
-}
-
-void loop(){
-  float temp1 = readTemp(0);
-  float temp2 = readTemp(1);
-  float v1 = readVoltage(2);
-  float v2 = readVoltage(3);
-  leap_time = millis();
-  if (leap_time > time + sleepTime){
-    battery = setPowerSource(v1, v2);
-    fan = controlFans(temp1, temp2);
-    extra_fan = controlExtraFan(temp1, temp2);
-    cycles += 1;
-    time = leap_time;
-  }
-  elapsed = leap_time - start_time;
-
-  EthernetClient client = server.available();
-  if(client){
-    boolean current_line_is_blank = true;
-    while(client.connected()){
-      if (client.available()){
-        char c = client.read();
-        if( c == '\n' && current_line_is_blank){
-          //client.println("GRENIER/1.0 200 OK");
-          //client.println("Content-Type: text/plain");
-          client.println();
-          client.print("temp1:");
-          client.println(temp1);
-          client.print("temp2:");
-          client.println(temp2);
-          client.print("v1:");
-          client.println(v1);
-          client.print("v2:");
-          client.println(v2);  
-          client.print("battery:");
-          client.println(battery);
-          client.print("fan:");
-          client.println(fan);
-          client.print("extra fan:");
-          client.println(fan);
-          client.print("cycles;");
-          client.println(cycles);
-          client.print("running time(ms):");
-          client.println(elapsed);
-          break;
-        }
-        if (c == '\n'){
-          current_line_is_blank = true;
-        } else if (c != '\r'){
-          current_line_is_blank = false;
-        }
-      }
-    }
-  delay(1);
-  client.stop();
-  }
 }
