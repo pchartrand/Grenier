@@ -14,10 +14,10 @@ const int measurementTime = 100;
 const unsigned long sleepTime = 60000;
 
 /* threshold temperatures */
-const float hot = 25.0;
+const float hot = 24.0;
 const float extra_hot = 30.0;
 
-/* NTC polynomial coeeficients for voltage to temperature conversion */
+/* NTC polynomial coefficients for voltage to temperature conversion */
 const float a3 = 3.296;
 const float b2 = -22.378;
 const float c1 =  70.951;
@@ -34,12 +34,12 @@ const int v2in = 3;
   pins 10, 11, 12, and 13 on the Uno are used by the ethernet shield
 */
 
-const int dc = 3;
-const int solar1out = 4;
-const int solar2out = 5;
-const int fan1out = 6;
-const int fan2out = 7;
-const int fan3out = 8;
+const int dc = 3;  //high -> solar, low -> power supply
+const int solar1out = 5;
+const int solar2out = 6;
+const int fan1out = 8;  //set to high if temp > high
+const int fan2out = 9; //set to high if temp > high
+const int fan3out = 3; //set to high if solar is strong 
 
 /* network */
 const int HTTP_PORT = 80;
@@ -64,7 +64,7 @@ void setup(){
   pinMode(solar2out, OUTPUT);  
   pinMode(fan1out, OUTPUT);
   pinMode(fan2out, OUTPUT);
-  pinMode(fan3out, OUTPUT);
+  //pinMode(fan3out, OUTPUT);
   Ethernet.begin(mac);
   server.begin();
   time = millis();
