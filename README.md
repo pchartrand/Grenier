@@ -8,4 +8,4 @@ Goal : to regulate the temperature in the attic.
 
 Requirements : use solar energy when possible to power the fans.
 
-More info in the [wiki](/pchartrand/Grenier/wiki)
+More info in the [wiki](https://github.com/pchartrand/Grenier/wiki)
