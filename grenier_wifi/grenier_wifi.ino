@@ -13,11 +13,11 @@
 
 /* digital outputs */
 #define SOLAR_POWER  2  //high -> solar, low -> power supply
-#define SOLAR_1_OUT 4
-#define SOLAR_2_OUT 6
-#define FAN_1_OUT 7  //set to high if temp > high
-#define FAN_2_OUT 8 //set to high if temp > high
-#define FAN_3_OUT 9 //set to high if solar is strong 
+#define SOLAR_1_OUT 6
+#define SOLAR_2_OUT 7
+#define FAN_1_OUT 8  //set to high if temp > high
+#define FAN_2_OUT 9 //set to high if temp > high
+#define FAN_3_OUT 4 //set to high if solar is strong 
 
 /* analog inputs */
 #define TEMP_1_IN 0
@@ -270,27 +270,35 @@ void parseFirstLine(char* line, char* action, char* path) {
     strncpy(path, linepath, MAX_PATH);
 }
 
+String booleanToText(int value){
+  if(value == 1){
+    return "oui";
+  }else{
+    return "non";
+  }
+}
+
 void printStatus(Adafruit_CC3000_ClientRef client){
     client.fastrprintln(F("Content-Type: text/html; charset=utf-8\r\nConnection: close\r\nRefresh: 60\r\n"));
     client.fastrprintln(F("<html>\n<head><title>Grenier</title></head>\n"));
     client.fastrprintln(F("<body><h1>Grenier</h1>\n"));
     client.fastrprintln(F("<p>température 1 :"));
     client.println(temp1);
-    client.fastrprintln(F("<br />température 2 :"));
+    client.fastrprintln(F("C<br />température 2 :"));
     client.println(temp2);
-    client.fastrprintln(F("</p>\n<p>panneau solaire 1 :"));
+    client.fastrprintln(F("C</p>\n<p>panneau solaire 1 :"));
     client.println(volt1);
-    client.fastrprintln(F("<br />panneau solaire 2 :"));
+    client.fastrprintln(F("V<br />panneau solaire 2 :"));
     client.println(volt2);  
-    client.fastrprintln(F("</p>\n<p>sur solaire :"));
-    client.println(battery_status);
-    client.fastrprintln(F("<br />ventilateurs :"));
-    client.println(fan_status);
-    client.fastrprintln(F("<br />ventilateur supplémentaire :"));
-    client.println(extra_fan_status);
-    client.fastrprintln(F("</p>\n<p>fonctionne depuis :"));
+    client.fastrprintln(F("V</p>\n<p>sur solaire :"));
+    client.println(booleanToText(battery_status));
+    client.fastrprintln(F("<br />ventilateurs 1 et 2 en fonction:"));
+    client.println(booleanToText(fan_status));
+    client.fastrprintln(F("<br />ventilateur supplémentaire en fonction:"));
+    client.println(booleanToText(extra_fan_status));
+    client.fastrprintln(F("</p>\n<p>arduino en fonction depuis :"));
     client.println((elapsed / 1000.0), 0);
-    client.fastrprintln(F("s</p></body></html>"));
+    client.fastrprintln(F("secondes.</p></body></html>"));
 }
     
 bool displayConnectionDetails(void)
