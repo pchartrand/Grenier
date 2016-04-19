@@ -1,4 +1,3 @@
-// reference voltage for temperature measurements 
 const int referenceVolts = 5;
 
 // time to wait before measurements
@@ -102,6 +101,21 @@ void controlExtraFan(int fan){
   Serial.println(fan);
 }
 
+String timestampToDays(long timestamp){
+    int secondes = timestamp % 60;
+    long ttl_minutes = (timestamp - secondes) / 60;
+    int minutes = ttl_minutes % 60;
+    long ttl_heures = (ttl_minutes - minutes) / 60;
+    int heures = ttl_heures % 24;
+    long ttl_jours = (ttl_heures - heures) / 24;
+    int jours = ttl_jours % 365;
+    int annees = (ttl_jours - jours) / 365;
+    int n;
+    char buf[30];
+    n = sprintf(buf, "%d années, %d jours, %02d:%02d:%02d", annees, jours, heures, minutes, secondes);
+    return buf;
+}
+
 void loop(){
   float temp1 = readTemp(0);
   float temp2 = readTemp(1);
@@ -128,6 +142,6 @@ void loop(){
   setPowerSource(battery);
   controlFans(fan);
   controlExtraFan(extra_fan);
-  
+  Serial.println(timestampToDays(millis() / 1000));
   delay(sleepTime * delayTime);
 }

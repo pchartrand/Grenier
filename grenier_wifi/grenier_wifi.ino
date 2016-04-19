@@ -12,7 +12,6 @@
 // On an UNO, SCK = 13, MISO = 12, and MOSI = 11
 
 /* digital outputs */
-#define SOLAR_POWER  2  //high -> solar, low -> power supply
 #define SOLAR_1_OUT 6
 #define SOLAR_2_OUT 7
 #define FAN_1_OUT 8  //set to high if temp > high
@@ -76,7 +75,8 @@ unsigned long start_time;
 unsigned long time;
 unsigned long leap_time;
 unsigned long elapsed = 0;
-int battery_status;
+int source_one_status;
+int source_two_status;
 int fan_status;
 int extra_fan_status;
 
@@ -94,7 +94,6 @@ char path[MAX_PATH+1];
 
 void setup(){
   start_time = millis();
-  pinMode(SOLAR_POWER, OUTPUT);
   pinMode(SOLAR_1_OUT, OUTPUT);
   pinMode(SOLAR_2_OUT, OUTPUT);  
   pinMode(FAN_1_OUT, OUTPUT);
@@ -140,7 +139,8 @@ void loop(){
   volt2 = readVoltage(VOLTAGE_2_IN);
   leap_time = millis();
   if (leap_time > time + sleepTime){
-    battery_status = setPowerSource(volt1, volt2);
+    source_one_status = setPowerSource(volt1, SOLAR_1_OUT);
+    source_two_status = setPowerSource(volt2, SOLAR_2_OUT);
     fan_status = controlFans(temp1, temp2);
     extra_fan_status = controlExtraFan(temp1, temp2);
     time = leap_time;
@@ -220,12 +220,12 @@ float readVoltage(int in){
   return volts;
 }
 
-int setPowerSource(float v1, float v2){
+int setPowerSource(float volts, int out){
   int power_level = LOW;
-  if (v1 > charged and v2 > charged) {
+  if (volts > charged) {
     power_level = HIGH;
   }
-  digitalWrite(SOLAR_POWER, power_level);
+  digitalWrite(out, power_level);
   return power_level;
 }
 
@@ -278,6 +278,21 @@ String booleanToText(int value){
   }
 }
 
+String secondsToDays(long timestamp){
+    int secondes = timestamp % 60;
+    long ttl_minutes = (timestamp - secondes) / 60;
+    int minutes = ttl_minutes % 60;
+    long ttl_heures = (ttl_minutes - minutes) / 60;
+    int heures = ttl_heures % 24;
+    long ttl_jours = (ttl_heures - heures) / 24;
+    int jours = ttl_jours % 365;
+    int annees = (ttl_jours - jours) / 365;
+    int n;
+    char buf[30];
+    n = sprintf(buf, "%d années, %d jours, %02d:%02d:%02d", annees, jours, heures, minutes, secondes);
+    return buf;
+}
+
 void printStatus(Adafruit_CC3000_ClientRef client){
     client.fastrprintln(F("Content-Type: text/html; charset=utf-8\r\nConnection: close\r\nRefresh: 60\r\n"));
     client.fastrprintln(F("<html>\n<head><title>Grenier</title></head>\n"));
@@ -289,18 +304,16 @@ void printStatus(Adafruit_CC3000_ClientRef client){
     client.fastrprintln(F("C</p>\n<p>panneau solaire 1 :"));
     client.println(volt1);
     client.fastrprintln(F("V<br />panneau solaire 2 :"));
-    client.println(volt2);  
-    client.fastrprintln(F("V</p>\n<p>sur solaire :"));
-    client.println(booleanToText(battery_status));
-    client.fastrprintln(F("<br />ventilateurs 1 et 2 en fonction:"));
+    client.println(volt2);
+    client.fastrprintln(F("V</p>\n<p>ventilateurs 1 et 2 en fonction:"));
     client.println(booleanToText(fan_status));
     client.fastrprintln(F("<br />ventilateur supplémentaire en fonction:"));
     client.println(booleanToText(extra_fan_status));
     client.fastrprintln(F("</p>\n<p>arduino en fonction depuis :"));
-    client.println((elapsed / 1000.0), 0);
+    client.println(secondsToDays(elapsed / 1000));
     client.fastrprintln(F("secondes.</p></body></html>"));
 }
-    
+
 bool displayConnectionDetails(void)
 {
   uint32_t ipAddress, netmask, gateway, dhcpserv, dnsserv;
