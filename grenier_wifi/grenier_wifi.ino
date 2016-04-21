@@ -146,7 +146,6 @@ void loop(){
     time = leap_time;
   }
   elapsed = leap_time - start_time;
-  Serial.print(F("Free RAM: ")); Serial.println(getFreeRam(), DEC);
   Adafruit_CC3000_ClientRef client = httpServer.available();
   if(client){
     Serial.println(F("Client connected."));
