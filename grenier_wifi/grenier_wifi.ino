@@ -1,52 +1,22 @@
+#include <SoftwareSerial.h> 
+#include <SparkFunESP8266WiFi.h>
+const char mySSID[] = "beaconsfield";
+const char myPSK[] = "fafabebe1a1a";
 
-#include <SPI.h>
-#include <Adafruit_CC3000.h>
-#include "utility/debug.h"
-#include "utility/socket.h"
-// These are the interrupt and control pins
-#define ADAFRUIT_CC3000_IRQ   3  // MUST be an interrupt pin!
-// These can be any two pins
-#define ADAFRUIT_CC3000_VBAT  5
-#define ADAFRUIT_CC3000_CS    10
-// Use hardware SPI for the remaining pins
-// On an UNO, SCK = 13, MISO = 12, and MOSI = 11
 
 /* digital outputs */
-#define SOLAR_1_OUT 6
-#define SOLAR_2_OUT 7
-#define FAN_1_OUT 8  //set to high if temp > high
-#define FAN_2_OUT 9 //set to high if temp > high
-#define FAN_3_OUT 4 //set to high if solar is strong 
+//pins 8 and 9 are used for serial communication with the esp8266
+#define SOLAR_1_OUT 2
+#define SOLAR_2_OUT 3
+#define FAN_1_OUT 10 //set to high if temp > high
+#define FAN_2_OUT 11 //set to high if temp > high
+#define FAN_3_OUT 12 //set to high if solar is strong 
 
 /* analog inputs */
 #define TEMP_1_IN 0
 #define TEMP_2_IN 1
 #define VOLTAGE_1_IN 2
 #define VOLTAGE_2_IN 3
-
-Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, ADAFRUIT_CC3000_IRQ, ADAFRUIT_CC3000_VBAT,
-                                         SPI_CLOCK_DIVIDER); // you can change this clock speed
-
-#define WLAN_SSID       "beaconsfield"   // cannot be longer than 32 characters!
-#define WLAN_PASS       "fafabebe1a1a"
-// Security can be WLAN_SEC_UNSEC, WLAN_SEC_WEP, WLAN_SEC_WPA or WLAN_SEC_WPA2
-#define WLAN_SECURITY   WLAN_SEC_WPA2
-
-#define LISTEN_PORT           80
-#define MAX_ACTION            10      // Maximum length of the HTTP action that can be parsed.
-
-#define MAX_PATH              64      // Maximum length of the HTTP request path that can be parsed.
-                                      // There isn't much memory available so keep this short!
-
-#define BUFFER_SIZE           MAX_ACTION + MAX_PATH + 20  // Size of buffer for incoming request data.
-                                                          // Since only the first line is parsed this
-                                                          // needs to be as large as the maximum action
-                                                          // and path plus a little for whitespace and
-                                                          // HTTP version.
-
-#define TIMEOUT_MS            500    // Amount of time in milliseconds to wait for
-                                     // an incoming request to finish.  Don't set this
-                                     // too high or your server could be slow to respond.
 
 
 /* reference voltages */
@@ -85,12 +55,24 @@ float temp2;
 float volt1;
 float volt2;
 
+const String htmlHeader = "HTTP/1.1 200 OK\r\n"
+                          "Content-Type: text/html; charset=utf-8\r\n"
+                          "Connection: close\r\n"
+                          "Refresh: 60\r\n\r\n";
+                          
 /* program start */
-Adafruit_CC3000_Server httpServer(LISTEN_PORT);
-uint8_t buffer[BUFFER_SIZE+1];
-int bufindex = 0;
-char action[MAX_ACTION+1];
-char path[MAX_PATH+1];
+ESP8266Server server = ESP8266Server(80);
+
+void serverSetup()
+{
+  // begin initializes a ESP8266Server object. It will
+  // start a server on the port specified in the object's
+  // constructor (in global area)
+  server.begin();
+  Serial.print(F("Server started! Go to "));
+  Serial.println(esp8266.localIP());
+  Serial.println();
+}
 
 void setup(){
   start_time = millis();
@@ -99,36 +81,10 @@ void setup(){
   pinMode(FAN_1_OUT, OUTPUT);
   pinMode(FAN_2_OUT, OUTPUT);
   pinMode(FAN_3_OUT, OUTPUT);
-  
-  Serial.begin(115200);
-  Serial.print("Free RAM: "); Serial.println(getFreeRam(), DEC);
-  Serial.println(F("\nInitializing..."));
-  if (!cc3000.begin())
-  {
-    Serial.println(F("Couldn't begin()! Check your wiring?"));
-    while(1);
-  }
-  Serial.print(F("\nAttempting to connect to ")); Serial.println(WLAN_SSID);
-  if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
-    Serial.println(F("Failed!"));
-    while(1);
-  }
-   
-  Serial.println(F("Connected!"));
-  
-  Serial.println(F("Request DHCP"));
-  while (!cc3000.checkDHCP())
-  {
-    delay(100); // ToDo: Insert a DHCP timeout!
-  }  
-
-  // Display the IP address DNS, Gateway, etc.
-  while (! displayConnectionDetails()) {
-    delay(1000);
-  }
-  
-  httpServer.begin();
-  Serial.println(F("Listening for connections..."));
+  Serial.begin(9600);  
+  initializeESP8266();
+  connectESP8266();
+  serverSetup();
   time = millis();
 }
 
@@ -146,56 +102,67 @@ void loop(){
     time = leap_time;
   }
   elapsed = leap_time - start_time;
-  Adafruit_CC3000_ClientRef client = httpServer.available();
-  if(client){
-    Serial.println(F("Client connected."));
-    // Process this request until it completes or times out.
-    // Note that this is explicitly limited to handling one request at a time!
-
-    // Clear the incoming data buffer and point to the beginning of it.
-    bufindex = 0;
-    memset(&buffer, 0, sizeof(buffer));
-    
-    // Clear action and path strings.
-    memset(&action, 0, sizeof(action));
-    memset(&path,   0, sizeof(path));
-
-    // Set a timeout for reading all the incoming data.
-    unsigned long endtime = millis() + TIMEOUT_MS;
-    
-    // Read all the incoming data until it can be parsed or the timeout expires.
-    bool parsed = false;
-    while (!parsed && (millis() < endtime) && (bufindex < BUFFER_SIZE)) {
-      if (client.available()) {
-        buffer[bufindex++] = client.read();
+  ESP8266Client client = server.available(500);
+  if (client) 
+  {
+    Serial.println(F("Client Connected!"));
+    // an http request ends with a blank line
+    boolean currentLineIsBlank = true;
+    while (client.connected()) 
+    {
+      if (client.available()) 
+      {
+        char c = client.read();
+        // if you've gotten to the end of the line (received a newline
+        // character) and the line is blank, the http request has ended,
+        // so you can send a reply
+        if (c == '\n' && currentLineIsBlank) 
+        {
+          Serial.println(F("Sending HTML page"));
+          // send a standard http response header:
+          client.print(htmlHeader);
+          String htmlBody;
+          htmlBody = F("<html>\n<head><title>Grenier</title></head>\n<body><h1>Grenier</h1>\n<p>température 1 :");
+          htmlBody += temp1;
+          htmlBody += F("C\n<br />température 2 :");
+          htmlBody += temp2;
+          htmlBody += F("C\n</p>\n<p>panneau solaire 1 : ");
+          htmlBody += volt1;
+          htmlBody += F("V\n<br />panneau solaire 2 : ");
+          htmlBody += volt2;
+          htmlBody += F("V</p>\n");
+          client.print(htmlBody);
+          htmlBody = F("<p>ventilateurs 1 et 2 en fonction : ");
+          htmlBody += booleanToText(fan_status);
+          htmlBody += F("<br />\nventilateur supplémentaire en fonction : ");
+          htmlBody += booleanToText(extra_fan_status);
+          htmlBody += F("</p>\n<p>arduino en fonction depuis : ");
+          htmlBody += secondsToDays(elapsed / 1000);
+          htmlBody += F(" secondes.</p>\n</body>\n</html>");
+          client.print(htmlBody);
+          break;
+        }
+        if (c == '\n') 
+        {
+          // you're starting a new line
+          currentLineIsBlank = true;
+        }
+        else if (c != '\r') 
+        {
+          // you've gotten a character on the current line
+          currentLineIsBlank = false;
+        }
       }
-      parsed = parseRequest(buffer, bufindex, action, path);
     }
-    // Handle the request if it was parsed.
-    if (parsed) {
-      Serial.println(F("Processing request"));
-      Serial.print(F("Action: ")); Serial.println(action);
-      Serial.print(F("Path: ")); Serial.println(path);
-      // Check the action to see if it was a GET request.
-      if (strcmp(action, "GET") == 0) {
-        client.fastrprintln(F("HTTP/1.1 200 OK"));
-        printStatus(client);
-      }
-      else {
-        client.fastrprintln(F("HTTP/1.1 405 Method Not Allowed"));
-        client.fastrprintln(F(""));
-      }
-    }
-
-    // Wait a short period to make sure the response had time to send before
-    // the connection is closed (the CC3000 sends data asyncronously).
-    delay(100);
-
-    // Close the connection when done.
+    // give the web browser time to receive the data
+    delay(1);
+   
+    // close the connection:
+    client.stop();
     Serial.println(F("Client disconnected"));
-    client.close();
   }
 }
+
 /* functions */
 
 float valToVolts(int val){
@@ -246,28 +213,62 @@ int controlExtraFan(float temp1, float temp2){
   digitalWrite(FAN_3_OUT, extra_fan);
   return extra_fan;
 }
-
-bool parseRequest(uint8_t* buf, int bufSize, char* action, char* path) {
-  // Check if the request ends with \r\n to signal end of first line.
-  if (bufSize < 2)
-    return false;
-  if (buf[bufSize-2] == '\r' && buf[bufSize-1] == '\n') {
-    parseFirstLine((char*)buf, action, path);
-    return true;
+void initializeESP8266()
+{
+  // esp8266.begin() verifies that the ESP8266 is operational
+  // and sets it up for the rest of the sketch.
+  // It returns either true or false -- indicating whether
+  // communication was successul or not.
+  // true
+  int test = esp8266.begin();
+  if (test != true)
+  {
+    Serial.println(F("Error talking to ESP8266."));
+    errorLoop(test);
   }
-  return false;
+  Serial.println(F("ESP8266 Shield Present"));
 }
 
-void parseFirstLine(char* line, char* action, char* path) {
-  // Parse first word up to whitespace as action.
-  char* lineaction = strtok(line, " ");
-  if (lineaction != NULL)
-    strncpy(action, lineaction, MAX_ACTION);
-  // Parse second word up to whitespace as path.
-  char* linepath = strtok(NULL, " ");
-  if (linepath != NULL)
-    strncpy(path, linepath, MAX_PATH);
+void connectESP8266()
+{
+  int retVal = esp8266.getMode();
+  if (retVal != ESP8266_MODE_STA)
+  { 
+    retVal = esp8266.setMode(ESP8266_MODE_STA);
+    if (retVal < 0)
+    {
+      Serial.println(F("Error setting mode."));
+      errorLoop(retVal);
+    }
+  }
+  Serial.println(F("Mode set to station"));
+
+   retVal = esp8266.status();
+  if (retVal <= 0)
+  {
+    Serial.print(F("Connecting to "));
+    Serial.println(mySSID);
+    
+    retVal = esp8266.connect(mySSID, myPSK);
+    if (retVal < 0)
+    {
+      Serial.println(F("Error connecting"));
+      errorLoop(retVal);
+    }
+  }
 }
+
+void(* resetFunc) (void) = 0;//declare reset function at address 0
+
+void errorLoop(int error)
+{
+  Serial.print(F("Error: ")); Serial.println(error);
+  Serial.println(F("Will now reboot."));
+  Serial.println();
+  delay(3000);
+   resetFunc();  //call reset
+}
+
 
 String booleanToText(int value){
   if(value == 1){
@@ -290,46 +291,4 @@ String secondsToDays(long timestamp){
     char buf[30];
     n = sprintf(buf, "%d années, %d jours, %02d:%02d:%02d", annees, jours, heures, minutes, secondes);
     return buf;
-}
-
-void printStatus(Adafruit_CC3000_ClientRef client){
-    client.fastrprintln(F("Content-Type: text/html; charset=utf-8\r\nConnection: close\r\nRefresh: 60\r\n"));
-    client.fastrprintln(F("<html>\n<head><title>Grenier</title></head>\n"));
-    client.fastrprintln(F("<body><h1>Grenier</h1>\n"));
-    client.fastrprintln(F("<p>température 1 :"));
-    client.println(temp1);
-    client.fastrprintln(F("C<br />température 2 :"));
-    client.println(temp2);
-    client.fastrprintln(F("C</p>\n<p>panneau solaire 1 :"));
-    client.println(volt1);
-    client.fastrprintln(F("V<br />panneau solaire 2 :"));
-    client.println(volt2);
-    client.fastrprintln(F("V</p>\n<p>ventilateurs 1 et 2 en fonction:"));
-    client.println(booleanToText(fan_status));
-    client.fastrprintln(F("<br />ventilateur supplémentaire en fonction:"));
-    client.println(booleanToText(extra_fan_status));
-    client.fastrprintln(F("</p>\n<p>arduino en fonction depuis :"));
-    client.println(secondsToDays(elapsed / 1000));
-    client.fastrprintln(F("secondes.</p></body></html>"));
-}
-
-bool displayConnectionDetails(void)
-{
-  uint32_t ipAddress, netmask, gateway, dhcpserv, dnsserv;
-  
-  if(!cc3000.getIPAddress(&ipAddress, &netmask, &gateway, &dhcpserv, &dnsserv))
-  {
-    Serial.println(F("Unable to retrieve the IP Address!\r\n"));
-    return false;
-  }
-  else
-  {
-    Serial.print(F("\nIP Addr: ")); cc3000.printIPdotsRev(ipAddress);
-    Serial.print(F("\nNetmask: ")); cc3000.printIPdotsRev(netmask);
-    Serial.print(F("\nGateway: ")); cc3000.printIPdotsRev(gateway);
-    Serial.print(F("\nDHCPsrv: ")); cc3000.printIPdotsRev(dhcpserv);
-    Serial.print(F("\nDNSserv: ")); cc3000.printIPdotsRev(dnsserv);
-    Serial.println();
-    return true;
-  }
 }
