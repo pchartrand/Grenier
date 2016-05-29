@@ -31,6 +31,7 @@ const float voltageDivider = 10.0;
 
 /* timing constants */
 const int measurementTime = 100; 
+const int timeBetweenSolarPanelVoltageMeasurements = 2000;
 const unsigned long sleepTime = 60000;
 
 /* NTC polynomial coefficients for voltage to temperature conversion */
@@ -56,6 +57,8 @@ float temp1;
 float temp2;
 float volt1;
 float volt2;
+float volt1WithLoad;
+float volt2WithLoad;
 
 const String htmlHeader = "HTTP/1.1 200 OK\r\n"
                           "Content-Type: text/html; charset=utf-8\r\n"
@@ -103,16 +106,18 @@ void loop(){
     extraFanStatus = controlExtraFan(temp1, temp2);
     if (fanStatus == HIGH){
       Serial.println(F("fan status is HIGH"));
-      for(int n=0; n < 2; n++){
-        Serial.print(F("voltage one: "));Serial.println(volt1);
-        Serial.print(F("voltage two: "));Serial.println(volt2);
-        delay(14 * measurementTime);
+      for(int n=0; n < 2; n++){  
+        delay(timeBetweenSolarPanelVoltageMeasurements);
         volt1 = readVoltage(VOLTAGE_1_IN);
         volt2 = readVoltage(VOLTAGE_2_IN);
+        Serial.print(F("voltage one: "));Serial.println(volt1);
+        Serial.print(F("voltage two: "));Serial.println(volt2);
         sourceOneStatus = setPowerSource(volt1, SOLAR_1_OUT);
         Serial.print(F("set source one to "));Serial.println(booleanToText(sourceOneStatus));
         sourceTwoStatus = setPowerSource(volt2, SOLAR_2_OUT);
         Serial.print(F("set source two to "));Serial.println(booleanToText(sourceTwoStatus));
+        volt1WithLoad = volt1;
+        volt2WithLoad = volt2;
       }
     }else{
       Serial.println(F("fan status is LOW"));
@@ -281,6 +286,10 @@ void sendResponse(ESP8266Client client){
     htmlBody += volt1;
     htmlBody += F("V\n<br />Tension sur panneau solaire 2 : ");
     htmlBody += volt2;
+    htmlBody += F("V\n</p>\n<p>Tension en charge 1 : ");
+    htmlBody += volt1WithLoad;
+    htmlBody += F("V\n<br />Tension en charge 2 : ");
+    htmlBody += volt2WithLoad;
     htmlBody += F("V</p>\n");
     client.print(htmlBody);
     
