@@ -24,7 +24,7 @@ const float extraHot = 27.0;
 
 /* reference voltages */
 const int referenceVolts = 5;
-const float charged = 15.0;
+const float charged = 12.0;
 
 /* resistor divider network for voltage measurement */
 const float voltageDivider = 10.0;
@@ -95,19 +95,30 @@ void loop(){
   temp2 = readTemp(TEMP_2_IN);
   leapTime = millis();
   if (leapTime > time + sleepTime){
+    Serial.println(F("inside test"));
     if (fanStatus == HIGH){
          fanOnTime += (leapTime - time);
     }
     fanStatus = controlFans(temp1, temp2);
     extraFanStatus = controlExtraFan(temp1, temp2);
     if (fanStatus == HIGH){
-      delay(measurementTime);
-      volt1 = readVoltage(VOLTAGE_1_IN);
-      volt2 = readVoltage(VOLTAGE_2_IN);
-      sourceOneStatus = setPowerSource(volt1, SOLAR_1_OUT);
-      sourceTwoStatus = setPowerSource(volt2, SOLAR_2_OUT);
+      Serial.println(F("fan status is HIGH"));
+      for(int n=0; n < 2; n++){
+        Serial.print(F("voltage one: "));Serial.println(volt1);
+        Serial.print(F("voltage two: "));Serial.println(volt2);
+        delay(14 * measurementTime);
+        volt1 = readVoltage(VOLTAGE_1_IN);
+        volt2 = readVoltage(VOLTAGE_2_IN);
+        sourceOneStatus = setPowerSource(volt1, SOLAR_1_OUT);
+        Serial.print(F("set source one to "));Serial.println(booleanToText(sourceOneStatus));
+        sourceTwoStatus = setPowerSource(volt2, SOLAR_2_OUT);
+        Serial.print(F("set source two to "));Serial.println(booleanToText(sourceTwoStatus));
+      }
+    }else{
+      Serial.println(F("fan status is LOW"));
     }  
     time = leapTime;
+    Serial.println(F("outside test"));
   }else{
     volt1 = readVoltage(VOLTAGE_1_IN);
     volt2 = readVoltage(VOLTAGE_2_IN);
