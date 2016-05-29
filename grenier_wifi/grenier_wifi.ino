@@ -282,13 +282,13 @@ void sendResponse(ESP8266Client client){
     htmlBody += temp1;
     htmlBody += F("C\n<br />Température extérieure :");
     htmlBody += temp2;
-    htmlBody += F("C\n</p>\n<p>Tension sur panneau solaire 1 : ");
+    htmlBody += F("C\n</p>\n<p>Tension sur panneau solaire 1 (sans charge) : ");
     htmlBody += volt1;
-    htmlBody += F("V\n<br />Tension sur panneau solaire 2 : ");
-    htmlBody += volt2;
-    htmlBody += F("V\n</p>\n<p>Tension en charge 1 : ");
+    htmlBody += F("V\n<br />Tension sur panneau solaire 1 (avec charge) : ");
     htmlBody += volt1WithLoad;
-    htmlBody += F("V\n<br />Tension en charge 2 : ");
+    htmlBody += F("V\n</p>\n<p>Tension sur panneau solaire 2 (sans charge): ");
+    htmlBody += volt2;
+    htmlBody += F("V\n<br />Tension sur panneau solaire 2 (avec charge): ");
     htmlBody += volt2WithLoad;
     htmlBody += F("V</p>\n");
     client.print(htmlBody);
