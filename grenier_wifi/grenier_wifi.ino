@@ -301,7 +301,7 @@ void sendResponse(ESP8266Client client){
     htmlBody += booleanToText(fanStatus);
     htmlBody += F("<br />\nVentilateur supplémentaire en fonction : ");
     htmlBody += booleanToText(extraFanStatus);
-    htmlBody += F("</p>\n");
+    htmlBody += F("</p>\n");    
     client.print(htmlBody);
     
     htmlBody  = F("<p>Arduino en fonction depuis : ");
@@ -310,6 +310,7 @@ void sendResponse(ESP8266Client client){
     htmlBody += secondsToDays(fanOnTime / 1000);
     htmlBody += F("</p>\n</body>\n</html>");
     client.print(htmlBody);
+
 }
 
 String booleanToText(int value){
@@ -325,9 +326,22 @@ String secondsToDays(long timestamp){
     long ttl_jours = (ttl_heures - heures) / 24;
     int jours = ttl_jours % 365;
     int annees = (ttl_jours - jours) / 365;
-    int n;
-    char buf[35];
-    n = sprintf(buf, "%d années, %d jours, %02d h %02d m %02d s", annees, jours, heures, minutes, secondes);
-    return buf;
+    String return_value ="";
+
+    return_value += String(annees) + " années, ";
+    return_value += String(jours) + " jours, ";
+    if (heures <10){
+      return_value +='0';
+    }
+    return_value += String(heures) + ":";
+    if (minutes <10){
+      return_value +='0';
+    }
+    return_value += String(minutes) + ":";
+    if (secondes <10){
+      return_value +='0';
+    }
+    return_value += String(secondes);
+    return return_value;
 }
 
