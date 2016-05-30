@@ -44,9 +44,9 @@ const float d = -49.382;
 unsigned long startTime;
 unsigned long time;
 unsigned long leapTime;
-unsigned long elapsed = 0;
 
-long fanOnTime;
+unsigned long elapsed = 0;
+unsigned long fanOnTime = 0;
 
 int sourceOneStatus = LOW;
 int sourceTwoStatus = LOW;
