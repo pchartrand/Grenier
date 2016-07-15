@@ -17,10 +17,11 @@ const char myPSK[] = "fafabebe1a1a";
 #define TEMP_2_IN 1
 #define VOLTAGE_1_IN 2
 #define VOLTAGE_2_IN 3
+#define VOLTAGE_3_IN 4
 
 /* threshold temperatures */
 const float hot = 23.0;
-const float extraHot = 27.0;
+const float extraHot = 26.0;
 
 /* reference voltages */
 const int referenceVolts = 5;
@@ -41,9 +42,9 @@ const float c1 =  70.951;
 const float d = -49.382;
 
 /* global variables */
-unsigned long startTime;
+unsigned long startTime = 0;
 unsigned long time;
-unsigned long leapTime;
+unsigned long leapTime = 0;
 
 unsigned long elapsed = 0;
 unsigned long fanOnTime = 0;
@@ -57,6 +58,7 @@ float temp1;
 float temp2;
 float volt1;
 float volt2;
+float volt3;
 float volt1WithLoad;
 float volt2WithLoad;
 
@@ -110,8 +112,10 @@ void loop(){
         delay(timeBetweenSolarPanelVoltageMeasurements);
         volt1 = readVoltage(VOLTAGE_1_IN);
         volt2 = readVoltage(VOLTAGE_2_IN);
+        volt3 = readVoltage(VOLTAGE_3_IN);
         Serial.print(F("voltage one: "));Serial.println(volt1);
         Serial.print(F("voltage two: "));Serial.println(volt2);
+        Serial.print(F("voltage three: "));Serial.println(volt3);
         sourceOneStatus = setPowerSource(volt1, SOLAR_1_OUT);
         Serial.print(F("set source one to "));Serial.println(booleanToText(sourceOneStatus));
         sourceTwoStatus = setPowerSource(volt2, SOLAR_2_OUT);
@@ -121,12 +125,15 @@ void loop(){
       }
     }else{
       Serial.println(F("fan status is LOW"));
+      volt1WithLoad = volt1;
+      volt2WithLoad = volt2;
     }  
     time = leapTime;
     Serial.println(F("outside test"));
   }else{
     volt1 = readVoltage(VOLTAGE_1_IN);
     volt2 = readVoltage(VOLTAGE_2_IN);
+    volt3 = readVoltage(VOLTAGE_3_IN);
   }
   elapsed = leapTime - startTime;
   acceptRequests();
@@ -290,6 +297,8 @@ void sendResponse(ESP8266Client client){
     htmlBody += volt2;
     htmlBody += F("V\n<br />Tension sur panneau solaire 2 (avec charge): ");
     htmlBody += volt2WithLoad;
+    htmlBody += F("V\n<br />Tension sur panneau solaire 3: ");
+    htmlBody += volt3;
     htmlBody += F("V</p>\n");
     client.print(htmlBody);
     
@@ -301,47 +310,17 @@ void sendResponse(ESP8266Client client){
     htmlBody += booleanToText(fanStatus);
     htmlBody += F("<br />\nVentilateur supplémentaire en fonction : ");
     htmlBody += booleanToText(extraFanStatus);
-    htmlBody += F("</p>\n");    
+    htmlBody += F("</p>\n");
     client.print(htmlBody);
     
     htmlBody  = F("<p>Arduino en fonction depuis : ");
-    htmlBody += secondsToDays(elapsed / 1000);
-    htmlBody += F("</p>\n<p>Ventilation en fonction depuis : ");
-    htmlBody += secondsToDays(fanOnTime / 1000);
-    htmlBody += F("</p>\n</body>\n</html>");
+    htmlBody += elapsed / 1000;
+    htmlBody += F(" secondes</p>\n<p>Ventilation en fonction depuis : ");
+    htmlBody += fanOnTime / 1000;
+    htmlBody += F(" secondes</p>\n</body>\n</html>");
     client.print(htmlBody);
-
 }
 
 String booleanToText(int value){
   return (value == 1) ? "oui": "non";
 }
-
-String secondsToDays(long timestamp){
-    int secondes = timestamp % 60;
-    long ttl_minutes = (timestamp - secondes) / 60;
-    int minutes = ttl_minutes % 60;
-    long ttl_heures = (ttl_minutes - minutes) / 60;
-    int heures = ttl_heures % 24;
-    long ttl_jours = (ttl_heures - heures) / 24;
-    int jours = ttl_jours % 365;
-    int annees = (ttl_jours - jours) / 365;
-    String return_value ="";
-
-    return_value += String(annees) + " années, ";
-    return_value += String(jours) + " jours, ";
-    if (heures <10){
-      return_value +='0';
-    }
-    return_value += String(heures) + ":";
-    if (minutes <10){
-      return_value +='0';
-    }
-    return_value += String(minutes) + ":";
-    if (secondes <10){
-      return_value +='0';
-    }
-    return_value += String(secondes);
-    return return_value;
-}
-
